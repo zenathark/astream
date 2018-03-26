@@ -1,0 +1,23 @@
+{
+  "name": "webclient",
+  "version": "1.0.0",
+  "description": "Client for JSON music streamer",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "webpack --config webpack.config.js"
+  },
+  "author": "Juan Carlos Galan Hernandez",
+  "license": "MIT",
+  "dependencies": {
+    "react": "16.2.0",
+    "react-dom": "16.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "16.0.38",
+    "@types/react-dom": "16.0.4",
+    "awesome-typescript-loader": "3.5.0",
+    "source-map-loader": "0.2.3",
+    "typescript": "2.7.2"
+  }
+}
