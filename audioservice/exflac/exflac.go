@@ -78,22 +78,22 @@ func NewBufferWithEndianess(filename string, blockSize uint32, e Endianess) (*Fl
 		case 1:
 			f = PutInt8
 		case 2:
-			f = lPutInt16
+			f = LPutInt16
 		case 3:
-			f = lPutInt24
+			f = LPutInt24
 		case 4:
-			f = lPutInt32
+			f = LPutInt32
 		}
 	} else {
 		switch bs := int(math.Ceil(float64(stream.Info.BitsPerSample) / 8)); bs {
 		case 1:
 			f = PutInt8
 		case 2:
-			f = bPutInt16
+			f = BPutInt16
 		case 3:
-			f = bPutInt24
+			f = BPutInt24
 		case 4:
-			f = bPutInt32
+			f = BPutInt32
 		}
 	}
 	ans.encode = f
@@ -133,42 +133,125 @@ func (f *FlacBuffer) Close() error {
 }
 
 // PutInt8 puts a byte on the stream
-func PutInt8(v int32, s sampleChannel) {
-	s <- byte(v & 0xFF)
+func PutInt8(val int32, s sampleChannel) {
+	v := abs(val)
+	packed := v & 0x7F
+	if val < 0 {
+		packed |= 0x80
+	}
+	s <- byte(packed)
+}
+
+// GetInt8 get a byte from the stream
+func GetInt8(s sampleChannel) int32 {
+	b := <-s
+	ans := int32(b & 0x7F)
+	if b&0x80 > 0 {
+		ans *= -1
+	}
+	return ans
 }
 
 //LPutInt16 puts two bytes on the stream
-func LPutInt16(v int32, s sampleChannel) {
+func LPutInt16(val int32, s sampleChannel) {
+	v := abs(val)
 	s <- byte(v & 0xFF)
-	s <- byte(v >> 8 & 0xFF)
+	s <- calcMSB(val, 2)
+}
+
+// LGetInt16 gets a two bytes int in little endian from the stream
+func LGetInt16(s sampleChannel) int32 {
+	b1 := <-s
+	b2 := <-s
+	var ans int32
+	ans |= int32(b1)
+	ans = unpackMSB(ans, b2, 2)
+	return ans
 }
 
 //LPutInt24 puts two bytes on the stream
-func LPutInt24(v int32, s sampleChannel) {
+func LPutInt24(val int32, s sampleChannel) {
+	v := abs(val)
 	s <- byte(v & 0xFF)
 	s <- byte(v >> 8 & 0xFF)
-	s <- byte(v >> 16 & 0xFF)
+	s <- calcMSB(val, 3)
+}
+
+// LGetInt24 gets a two bytes int in little endian from the stream
+func LGetInt24(s sampleChannel) int32 {
+	b1 := <-s
+	b2 := <-s
+	b3 := <-s
+	var ans int32
+	ans |= int32(b2)
+	ans <<= 8
+	ans |= int32(b1)
+	ans = unpackMSB(ans, b3, 3)
+	return ans
 }
 
 //LPutInt32 puts two bytes on the stream
-func LPutInt32(v int32, s sampleChannel) {
+func LPutInt32(val int32, s sampleChannel) {
+	v := uint32(val)
 	s <- byte(v & 0xFF)
 	s <- byte(v >> 8 & 0xFF)
 	s <- byte(v >> 16 & 0xFF)
 	s <- byte(v >> 24 & 0xFF)
 }
 
+// LGetInt32 gets a two bytes int in little endian from the stream
+func LGetInt32(s sampleChannel) int32 {
+	b1 := <-s
+	b2 := <-s
+	b3 := <-s
+	b4 := <-s
+	var ans uint32
+	ans = uint32(b4)
+	ans <<= 8
+	ans |= uint32(b3)
+	ans <<= 8
+	ans |= uint32(b2)
+	ans <<= 8
+	ans |= uint32(b1)
+	return int32(ans)
+}
+
 // BPutInt16 puts two bytes on the stream
-func BPutInt16(v int32, s sampleChannel) {
+func BPutInt16(val int32, s sampleChannel) {
+	v := abs(val)
+	s <- calcMSB(val, 2)
+	s <- byte(v & 0xFF)
+}
+
+// BGetInt16 gets a two bytes int in big endian from the stream
+func BGetInt16(s sampleChannel) int32 {
+	b2 := <-s
+	b1 := <-s
+	var ans int32
+	ans |= int32(b1)
+	ans = unpackMSB(ans, b2, 2)
+	return ans
+}
+
+// BPutInt24 puts two bytes on the stream
+func BPutInt24(val int32, s sampleChannel) {
+	v := abs(val)
+	s <- calcMSB(val, 3)
 	s <- byte(v >> 8 & 0xFF)
 	s <- byte(v & 0xFF)
 }
 
-// BPutInt24 puts two bytes on the stream
-func BPutInt24(v int32, s sampleChannel) {
-	s <- byte(v >> 16 & 0xFF)
-	s <- byte(v >> 8 & 0xFF)
-	s <- byte(v & 0xFF)
+// BGetInt24 gets a two bytes int in big endian from the stream
+func BGetInt24(s sampleChannel) int32 {
+	b3 := <-s
+	b2 := <-s
+	b1 := <-s
+	var ans int32
+	ans |= int32(b2)
+	ans <<= 8
+	ans |= int32(b1)
+	ans = unpackMSB(ans, b3, 3)
+	return ans
 }
 
 // BPutInt32 puts two bytes on the stream
@@ -177,6 +260,23 @@ func BPutInt32(v int32, s sampleChannel) {
 	s <- byte(v >> 16 & 0xFF)
 	s <- byte(v >> 8 & 0xFF)
 	s <- byte(v & 0xFF)
+}
+
+// BGetInt32 gets a two bytes int in big endian from the stream
+func BGetInt32(s sampleChannel) int32 {
+	b4 := <-s
+	b3 := <-s
+	b2 := <-s
+	b1 := <-s
+	var ans int32
+	ans = int32(b4)
+	ans <<= 8
+	ans |= int32(b3)
+	ans <<= 8
+	ans |= int32(b2)
+	ans <<= 8
+	ans |= int32(b1)
+	return ans
 }
 
 // Decodes a sample and puts it into the channel
@@ -227,4 +327,35 @@ func (a *audioChannel) Seek(offset int) error {
 	a.curFrame = frm
 	a.position = frm.Subframes[a.channelIdx].NSamples - offset
 	return nil
+}
+
+func abs(v int32) int32 {
+	if v >= 0 {
+		return v
+	}
+	return int32(0x80000000 - (uint32(v) & 0x7FFFFFFF))
+
+}
+
+// calcMSB calculates the most significant octet of a signed integer
+// of n byte size stored on a int32 type
+func calcMSB(val int32, n uint) byte {
+	v := abs(val)
+	packed := v >> ((n - 1) * 8) & 0x7F
+	if val < 0 {
+		packed |= 0x80
+	}
+	return byte(packed)
+}
+
+// Unpacks signed msb of an integer of n bytes size
+// into a int32 variable
+func unpackMSB(val int32, msb byte, n uint) int32 {
+	var unpack int32
+	unpack = int32(msb & 0x7F)
+	unpack <<= 8 * (n - 1)
+	if msb&0x80 > 0 {
+		return -1 * (val | unpack)
+	}
+	return val | unpack
 }
